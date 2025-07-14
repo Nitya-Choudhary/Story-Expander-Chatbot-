@@ -5,6 +5,8 @@ import requests
 # Load API keys securely from Streamlit Secrets
 os.environ["groq_api_key"] = sd.secrets["groq_api_key"]
 os.environ["TAVILY_API_KEY"] = sd.secrets["TAVILY_API_KEY"]
+st.write("Secrets loaded:", os.environ["groq_api_key"][:5], "...✔️")
+
 
 # Initialize chat history in session
 if "chat_history" not in sd.session_state:
@@ -76,3 +78,5 @@ if sd.button("Narrate"):
                 sd.error(f"An error occurred: {e}")
     else:
         sd.warning("Please enter a story arc or chapter concept.")
+
+
