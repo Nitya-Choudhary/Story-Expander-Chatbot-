@@ -1,5 +1,10 @@
 import streamlit as sd
 import requests
+import os
+
+# Load API keys securely from Streamlit Secrets
+os.environ["groq_api_key"] = st.secrets["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"]
+os.environ["TAVILY_API_KEY"] = st.secrets["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"]
 
 # Initialize chat history in session
 if "chat_history" not in sd.session_state:
