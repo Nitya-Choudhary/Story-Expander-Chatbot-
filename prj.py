@@ -1,78 +1,91 @@
-import streamlit as sd
-import requests
+import streamlit as st
 import os
+from typing import List
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langgraph.prebuilt import create_react_agent
+from langchain_groq import ChatGroq
+from langchain_core.messages import AIMessage
+import traceback
 
-# Load API keys securely from Streamlit Secrets
-os.environ["groq_api_key"] = sd.secrets["groq_api_key"]
-os.environ["TAVILY_API_KEY"] = sd.secrets["TAVILY_API_KEY"]
+# 🔐 Load API keys securely from Streamlit secrets
+os.environ["groq_api_key"] = st.secrets["groq_api_key"]
+os.environ["TAVILY_API_KEY"] = st.secrets["TAVILY_API_KEY"]
+groq_api_key = os.environ["groq_api_key"]
 
-# Initialize chat history in session
-if "chat_history" not in sd.session_state:
-    sd.session_state.chat_history = []
-
-# Sidebar history view
-sd.sidebar.title("🕛 Chat History")
-with sd.sidebar.expander("Past Narratives"):
-    for idx, chat in enumerate(reversed(sd.session_state.chat_history)):
-        sd.markdown(f"**{idx+1}. Genres:** {', '.join(chat['genre'])}")
-        sd.markdown(f"**Prompt:** {chat['prompt']}")
-
-# Constants
-API_URL = "http://127.0.0.1:7860/chat"
+# Supported model
 MODEL_NAME = "llama3-70b-8192"
 
+# Initialize tools (optional)
+tool_tavily = TavilySearchResults(max_results=2)
+tools = [tool_tavily]
+
+# Initialize chat history
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
+
+# Sidebar: Past Narratives
+st.sidebar.title("🕛 Chat History")
+with st.sidebar.expander("Past Narratives"):
+    for idx, chat in enumerate(reversed(st.session_state.chat_history)):
+        st.markdown(f"**{idx+1}. Genres:** {', '.join(chat['genre'])}")
+        st.markdown(f"**Prompt:** {chat['prompt']}")
+
 # Title and Inputs
-sd.title("Inkpot ✒️")
-genre = sd.multiselect("Genres:", ['Thriller', 'Romance', 'Fantasy', 'Self Help', 'Sci-Fi', 'Horror'])
-prompt = sd.text_area("Story Arc / Chapter Concept:", placeholder="Enter your story 🖊️", height=100)
+st.title("Inkpot ✒️")
+genre = st.multiselect("Genres:", ['Thriller', 'Romance', 'Fantasy', 'Self Help', 'Sci-Fi', 'Horror'])
+prompt = st.text_area("Story Arc / Chapter Concept:", placeholder="Enter your story 🖊️", height=100)
 story_length = "moderate"
 
-# Button Action
-if sd.button("Narrate"):
+# Handle "Narrate" button
+if st.button("Narrate"):
     if prompt.strip():
         if not genre:
-            sd.warning("Please select at least one genre.")
+            st.warning("Please select at least one genre.")
         else:
             try:
-                payload = {
-                    "model_name": MODEL_NAME,
-                    "system_prompt": (
-                        "You are a storytelling assistant. Based on the user's input, generate a complete short story "
-                        "with a structured narrative: engaging opening, character development, plot twists, climax, and resolution. "
-                        f"Ensure the writing reflects genre elements and matches the selected story length: {story_length}."
-                    ),
-                    "messages": [
-                        f"Story idea: {prompt}. Genres: {', '.join(genre)}. Write a full story based on this arc."
-                    ]
-                }
+                # System prompt for genre-aware story generation
+                system_prompt = (
+                    "You are a storytelling assistant. Based on the user's input, generate a complete short story "
+                    "with a structured narrative: engaging opening, character development, plot twists, climax, and resolution. "
+                    f"Ensure the writing reflects genre elements and matches the selected story length: {story_length}."
+                )
 
-                response = requests.post(API_URL, json=payload)
+                # Prepare messages
+                messages = [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": f"Story idea: {prompt}. Genres: {', '.join(genre)}. Write a full story based on this arc."}
+                ]
 
-                if response.status_code == 200:
-                    response_data = response.json()
-                    if "error" in response_data:
-                        sd.error(f"Model Error: {response_data['error']}")
-                    else:
-                        ai_response = [
-                            message["content"]
-                            for message in response_data.get("messages", [])
-                        ]
-                        if ai_response:
-                            story = ai_response[-1]
-                            sd.subheader("📖 Your Story")
-                            sd.markdown(story)
+                # Initialize model and agent
+                llm = ChatGroq(groq_api_key=groq_api_key, model_name=MODEL_NAME)
+                agent = create_react_agent(llm, tools=tools)
 
-                            # Save to session history
-                            sd.session_state.chat_history.append({
-                                "genre": genre,
-                                "prompt": prompt,
-                                "response": story
-                            })
-                        else:
-                            sd.warning("No AI response found in the model output.")
+                # Run the agent
+                result = agent.invoke({"messages": messages})
+
+                # Extract AI messages
+                ai_response = [
+                    msg.content
+                    for msg in result["messages"]
+                    if isinstance(msg, AIMessage)
+                ]
+
+                if ai_response:
+                    story = ai_response[-1]
+                    st.subheader("📖 Your Story")
+                    st.markdown(story)
+
+                    # Save to history
+                    st.session_state.chat_history.append({
+                        "genre": genre,
+                        "prompt": prompt,
+                        "response": story
+                    })
                 else:
-                    sd.error(f"Request failed with status code {response.status_code}.")
+                    st.warning("No story was generated. Try a different prompt or genre.")
             except Exception as e:
-                sd.error(f"An error occurred: {e}")
+                traceback.print_exc()
+                st.error(f"An error occurred: {e}")
     else:
-        sd.warning("Please enter a story arc or chapter concept.")
+        st.warning("Please enter a story arc or chapter concept.")
+
