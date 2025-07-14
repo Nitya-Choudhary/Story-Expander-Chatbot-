@@ -5,7 +5,7 @@ import requests
 # Load API keys securely from Streamlit Secrets
 os.environ["groq_api_key"] = sd.secrets["groq_api_key"]
 os.environ["TAVILY_API_KEY"] = sd.secrets["TAVILY_API_KEY"]
-st.write("Secrets loaded:", os.environ["groq_api_key"][:5], "...✔️")
+sd.write("Secrets loaded:", os.environ["groq_api_key"][:5], "...✔️")
 
 
 # Initialize chat history in session
